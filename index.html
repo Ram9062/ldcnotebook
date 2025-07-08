@@ -63,17 +63,16 @@
 
   <!-- Entry Section -->
   <div class="bg-white shadow rounded-lg p-4">
-    <div class="hidden sm:grid grid-cols-4 font-semibold mb-2 gap-2">
-      <span>Customer Name</span>
-      <span>Time</span>
-      <span>Driver Name</span>
-      <span></span>
+    <div class="hidden sm:grid grid-cols-12 font-semibold mb-2 gap-2">
+      <span class="col-span-4">Customer Name</span>
+      <span class="col-span-4">Time</span>
+      <span class="col-span-4">Driver Name</span>
     </div>
     <div id="entriesContainer" class="overflow-y-auto pr-1 max-h-[calc(100vh-220px)] sm:max-h-[70vh]"></div>
   </div>
 
   <script>
-    const SYNC_URL = "YOUR_WEB_APP_URL_HERE"; // Replace with your Google Apps Script URL
+    const SYNC_URL = "YOUR_WEB_APP_URL_HERE";
 
     const entryDate = document.getElementById('entryDate');
     const entriesContainer = document.getElementById('entriesContainer');
@@ -177,27 +176,29 @@
     }
 
     function createEntryElement(customer = '', time = '', driver = '') {
-      // Remove highlight from previous last entry
       entriesContainer.querySelectorAll('.entry-row').forEach(row => {
         row.classList.remove('last-entry');
       });
 
       const div = document.createElement('div');
-      div.className = 'grid grid-cols-1 sm:grid-cols-4 gap-2 mb-4 p-2 rounded entry-row items-center relative last-entry';
+      div.className = 'grid grid-cols-1 sm:grid-cols-12 gap-2 mb-4 p-2 rounded entry-row items-center relative last-entry';
       div.onclick = (e) => {
         if (['INPUT', 'SELECT', 'BUTTON'].includes(e.target.tagName)) return;
         selectRow(div);
       };
 
       div.innerHTML = `
-        <div class="relative">
+        <div class="col-span-12 sm:col-span-4">
           <input type="text" class="border px-3 py-2 rounded w-full" placeholder="Customer Name" value="${customer}" />
         </div>
-        <select class="border px-3 py-2 rounded w-full">
-          ${generateTimeOptions(time)}
-        </select>
-        <input type="text" class="border px-3 py-2 rounded w-full" placeholder="Driver Name" value="${driver}"/>
-        <div></div>
+        <div class="col-span-12 sm:col-span-4">
+          <select class="border px-3 py-2 rounded w-full">
+            ${generateTimeOptions(time)}
+          </select>
+        </div>
+        <div class="col-span-12 sm:col-span-4">
+          <input type="text" class="border px-3 py-2 rounded w-full" placeholder="Driver Name" value="${driver}" />
+        </div>
       `;
 
       entriesContainer.prepend(div);
@@ -296,7 +297,7 @@
       syncIcon.classList.add(status);
     }
 
-    setInterval(syncToGoogleSheet, 30000); // auto-sync every 30s
+    setInterval(syncToGoogleSheet, 30000);
 
     function updateNetworkStatus() {
       updateSyncIcon(navigator.onLine ? "success" : "error");

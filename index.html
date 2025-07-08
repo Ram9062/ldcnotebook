@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LDC Notebook</title>
   <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .entry-row:hover { background-color: #f3f4f6; }
     .entry-row.selected { background-color: #e0f2fe !important; }
     body.lock-scroll { overflow: hidden; }
+    #networkStatus.online { background-color: #22c55e; }
+    #networkStatus.offline { background-color: #ef4444; }
+    #networkStatus.syncing { background-color: #facc15; color: #000; }
   </style>
 </head>
 <body class="bg-gray-100 p-4">
@@ -36,6 +41,9 @@
     </div>
   </div>
 
+  <!-- Network Status Bar -->
+  <div id="networkStatus" class="hidden mb-2 text-sm text-white px-4 py-2 rounded text-center transition duration-300"></div>
+
   <!-- Entry Section -->
   <div class="bg-white shadow rounded-lg p-4">
     <div class="hidden sm:grid grid-cols-4 font-semibold mb-2 gap-2">
@@ -48,12 +56,13 @@
   </div>
 
   <script>
-    const SYNC_URL = "YOUR_WEB_APP_URL_HERE"; // <- Replace with your actual deployed Apps Script Web App URL
+    const SYNC_URL = "YOUR_WEB_APP_URL_HERE"; // Replace with your Google Apps Script URL
 
     const entryDate = document.getElementById('entryDate');
     const entriesContainer = document.getElementById('entriesContainer');
     const entryCount = document.getElementById('entryCount');
     const topDeleteIcon = document.getElementById('topDeleteIcon');
+    const networkStatus = document.getElementById('networkStatus');
 
     let selectedRow = null;
 
@@ -77,7 +86,7 @@
           const res = await fetch(`${SYNC_URL}?date=${dateKey}`);
           const data = await res.json();
           saved = data.entries || [];
-          localStorage.setItem(getStorageKey(), JSON.stringify(saved)); // Cache
+          localStorage.setItem(getStorageKey(), JSON.stringify(saved));
         } else {
           saved = JSON.parse(localStorage.getItem(getStorageKey())) || [];
         }
@@ -110,7 +119,7 @@
       });
       localStorage.setItem(getStorageKey(), JSON.stringify(entries));
       syncToGoogleSheet();
-      loadEntries(); // re-sort
+      loadEntries();
     }
 
     function createEntryElement(customer = '', time = '', driver = '') {
@@ -219,45 +228,62 @@ END:VCARD
     function syncToGoogleSheet() {
       if (!navigator.onLine) return;
 
-      const key = getStorageKey();
-      const entries = JSON.parse(localStorage.getItem(key)) || [];
-      if (!entries.length) return;
-
+      const entries = [];
       const currentDate = entryDate.value;
-      const entriesWithDate = entries.map(entry => ({
-        ...entry,
-        date: currentDate
-      }));
+
+      entriesContainer.querySelectorAll('.entry-row').forEach(row => {
+        const inputs = row.querySelectorAll('input, select');
+        entries.push({
+          date: currentDate,
+          customer: inputs[0].value,
+          time: inputs[1].value,
+          driver: inputs[2].value
+        });
+      });
+
+      showStatus("Syncing to Google Sheet...", "syncing");
 
       fetch(SYNC_URL, {
         method: "POST",
-        body: JSON.stringify(entriesWithDate),
+        body: JSON.stringify(entries),
         headers: {
           "Content-Type": "application/json"
         }
       }).then(res => {
-        console.log("✅ Synced to Google Sheet");
-        // Optional: remove cached data after sync
-        // localStorage.removeItem(key);
+        showStatus("✅ Synced to Google Sheet", "online");
+        setTimeout(() => hideStatus(), 3000);
       }).catch(err => {
         console.error("❌ Sync failed:", err);
+        showStatus("❌ Sync failed. Will retry later.", "offline");
       });
     }
 
-    // Auto sync every 30s
-    setInterval(syncToGoogleSheet, 30000);
+    setInterval(syncToGoogleSheet, 30000); // auto-sync every 30s
 
-    // Sync when back online
-    window.addEventListener('online', () => {
-      console.log("📶 Back online — attempting sync...");
-      syncToGoogleSheet();
-    });
+    function showStatus(message, type = "online") {
+      networkStatus.textContent = message;
+      networkStatus.className = `mb-2 text-sm px-4 py-2 rounded text-center ${type}`;
+      networkStatus.classList.remove("hidden");
+    }
 
-    window.addEventListener('offline', () => {
-      console.warn("📴 You're offline — entries will sync when connection returns.");
-    });
+    function hideStatus() {
+      networkStatus.classList.add("hidden");
+    }
+
+    function updateNetworkStatus() {
+      if (navigator.onLine) {
+        showStatus("You are online ✅", "online");
+        setTimeout(() => hideStatus(), 3000);
+      } else {
+        showStatus("You're offline 🚫. Changes will be saved locally.", "offline");
+      }
+    }
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
 
     // Initial load
+    updateNetworkStatus();
     loadEntries();
 
     // PWA support

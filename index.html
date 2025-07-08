@@ -1,3 +1,4 @@
+<!-- Your entire HTML file with modified createEntryElement function -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,9 +13,9 @@
     .entry-row:hover { background-color: #f3f4f6; }
     .entry-row.selected { background-color: #e0f2fe !important; }
     body.lock-scroll { overflow: hidden; }
-    #networkStatus.online { background-color: #22c55e; }
-    #networkStatus.offline { background-color: #ef4444; }
-    #networkStatus.syncing { background-color: #facc15; color: #000; }
+    #syncIcon.success { color: #22c55e; }
+    #syncIcon.error { color: #ef4444; }
+    #syncIcon.syncing { color: #facc15; }
   </style>
 </head>
 <body class="bg-gray-100 p-4">
@@ -34,7 +35,10 @@
   <div class="sticky top-0 bg-gray-100 z-10 pb-4 border-b border-gray-300">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
       <div>
-        <h1 class="text-xl sm:text-2xl font-bold">LDC Notebook</h1>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl sm:text-2xl font-bold">LDC Notebook</h1>
+          <span id="syncIcon" class="text-xl syncing" title="Syncing...">⏳</span>
+        </div>
         <p class="mt-1 text-sm text-gray-600">Total Entries: <span id="entryCount">0</span></p>
       </div>
       <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
@@ -45,15 +49,17 @@
           </div>
           <input type="date" id="entryDate" class="border rounded px-3 py-2 text-base w-full sm:w-auto" />
         </div>
-        <button onclick="addEntry()" class="bg-blue-500 text-white px-4 py-2 rounded w-full sm:w-auto">
-          Add Entry
-        </button>
+        <div class="flex gap-2">
+          <button onclick="addEntry()" class="bg-blue-500 text-white px-4 py-2 rounded w-full sm:w-auto">
+            Add Entry
+          </button>
+          <button onclick="saveEntries()" class="bg-green-500 text-white px-4 py-2 rounded w-full sm:w-auto">
+            Save
+          </button>
+        </div>
       </div>
     </div>
   </div>
-
-  <!-- Network Status Bar -->
-  <div id="networkStatus" class="hidden mb-2 text-sm text-white px-4 py-2 rounded text-center transition duration-300"></div>
 
   <!-- Entry Section -->
   <div class="bg-white shadow rounded-lg p-4">
@@ -73,7 +79,7 @@
     const entriesContainer = document.getElementById('entriesContainer');
     const entryCount = document.getElementById('entryCount');
     const topDeleteIcon = document.getElementById('topDeleteIcon');
-    const networkStatus = document.getElementById('networkStatus');
+    const syncIcon = document.getElementById('syncIcon');
 
     const FIXED_PHONE = "9062538991";
     const FIXED_PASSWORD = "9090";
@@ -85,7 +91,7 @@
       const token = JSON.parse(localStorage.getItem("ldcLogin"));
       if (!token) return false;
       const now = Date.now();
-      const diff = (now - token.timestamp) / (1000 * 60 * 60); // hours
+      const diff = (now - token.timestamp) / (1000 * 60 * 60);
       return diff < LOGIN_DURATION_HOURS;
     }
 
@@ -180,16 +186,17 @@
 
       div.innerHTML = `
         <div class="relative">
-          <input type="text" class="border px-3 py-2 rounded w-full pr-10" placeholder="Customer Name" value="${customer}" onchange="saveEntries()" />
-          <button title="Add to Contacts" class="absolute right-2 top-2 text-green-600 text-xl" onclick="event.stopPropagation(); downloadContact(this)">➕</button>
+          <input type="text" class="border px-3 py-2 rounded w-full" placeholder="Customer Name" value="${customer}" />
         </div>
-        <select class="border px-3 py-2 rounded w-full" onchange="saveEntries()">
+        <select class="border px-3 py-2 rounded w-full">
           ${generateTimeOptions(time)}
         </select>
-        <input type="text" class="border px-3 py-2 rounded w-full" placeholder="Driver Name" value="${driver}" onchange="saveEntries()"/>
+        <input type="text" class="border px-3 py-2 rounded w-full" placeholder="Driver Name" value="${driver}"/>
         <div></div>
       `;
-      entriesContainer.appendChild(div);
+
+      // 🟢 Add to top instead of bottom
+      entriesContainer.prepend(div);
       updateCount();
     }
 
@@ -244,37 +251,11 @@
 
     topDeleteIcon.addEventListener('click', deleteSelectedRow);
 
-    function downloadContact(button) {
-      const row = button.closest('.entry-row');
-      const inputs = row.querySelectorAll('input, select');
-      const name = inputs[0].value.trim();
-      const driver = inputs[2].value.trim();
-
-      if (!name) {
-        alert("Customer name is required to add to contacts.");
+    function syncToGoogleSheet() {
+      if (!navigator.onLine) {
+        updateSyncIcon("error");
         return;
       }
-
-      const vcf = `
-BEGIN:VCARD
-VERSION:3.0
-FN:${name}
-ORG:LDC Notebook
-NOTE:Driver: ${driver}
-END:VCARD
-      `.trim();
-
-      const blob = new Blob([vcf], { type: 'text/vcard' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${name.replace(/\s+/g, '_')}.vcf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    function syncToGoogleSheet() {
-      if (!navigator.onLine) return;
 
       const entries = [];
       const currentDate = entryDate.value;
@@ -289,40 +270,32 @@ END:VCARD
         });
       });
 
-      showStatus("Syncing to Google Sheet...", "syncing");
+      updateSyncIcon("syncing");
 
       fetch(SYNC_URL, {
         method: "POST",
         body: JSON.stringify(entries),
         headers: { "Content-Type": "application/json" }
       }).then(res => {
-        showStatus("✅ Synced to Google Sheet", "online");
-        setTimeout(() => hideStatus(), 3000);
+        updateSyncIcon("success");
       }).catch(err => {
         console.error("❌ Sync failed:", err);
-        showStatus("❌ Sync failed. Will retry later.", "offline");
+        updateSyncIcon("error");
       });
+    }
+
+    function updateSyncIcon(status) {
+      syncIcon.className = "text-xl";
+      syncIcon.textContent = status === "success" ? "✅" :
+                             status === "syncing" ? "⏳" :
+                             status === "error" ? "❌" : "";
+      syncIcon.classList.add(status);
     }
 
     setInterval(syncToGoogleSheet, 30000); // auto-sync every 30s
 
-    function showStatus(message, type = "online") {
-      networkStatus.textContent = message;
-      networkStatus.className = `mb-2 text-sm px-4 py-2 rounded text-center ${type}`;
-      networkStatus.classList.remove("hidden");
-    }
-
-    function hideStatus() {
-      networkStatus.classList.add("hidden");
-    }
-
     function updateNetworkStatus() {
-      if (navigator.onLine) {
-        showStatus("You are online ✅", "online");
-        setTimeout(() => hideStatus(), 3000);
-      } else {
-        showStatus("You're offline 🚫. Changes will be saved locally.", "offline");
-      }
+      updateSyncIcon(navigator.onLine ? "success" : "error");
     }
 
     function initApp() {
@@ -342,7 +315,6 @@ END:VCARD
       showLogin();
     }
 
-    // PWA support
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('service-worker.js');
     }

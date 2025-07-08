@@ -19,6 +19,17 @@
 </head>
 <body class="bg-gray-100 p-4">
 
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="fixed inset-0 bg-white flex items-center justify-center z-50">
+    <div class="bg-white border rounded-lg shadow-lg p-6 w-full max-w-sm">
+      <h2 class="text-xl font-semibold mb-4">LDC Login</h2>
+      <input id="phoneInput" type="text" placeholder="Phone Number" class="mb-3 w-full border px-3 py-2 rounded" />
+      <input id="passInput" type="password" placeholder="Password" class="mb-4 w-full border px-3 py-2 rounded" />
+      <button onclick="handleLogin()" class="bg-blue-500 text-white px-4 py-2 rounded w-full">Login</button>
+      <p id="loginError" class="text-red-600 text-sm mt-3 hidden">Invalid credentials.</p>
+    </div>
+  </div>
+
   <!-- Sticky Header -->
   <div class="sticky top-0 bg-gray-100 z-10 pb-4 border-b border-gray-300">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
@@ -36,6 +47,9 @@
         </div>
         <button onclick="addEntry()" class="bg-blue-500 text-white px-4 py-2 rounded w-full sm:w-auto">
           Add Entry
+        </button>
+        <button onclick="logout()" class="text-red-600 hover:underline text-sm mt-1 sm:mt-0">
+          Logout
         </button>
       </div>
     </div>
@@ -64,10 +78,47 @@
     const topDeleteIcon = document.getElementById('topDeleteIcon');
     const networkStatus = document.getElementById('networkStatus');
 
+    const FIXED_PHONE = "9062538991";
+    const FIXED_PASSWORD = "9090";
+    const LOGIN_DURATION_HOURS = 12;
+
     let selectedRow = null;
 
-    entryDate.valueAsDate = new Date();
-    entryDate.addEventListener('change', loadEntries);
+    function isLoggedIn() {
+      const token = JSON.parse(localStorage.getItem("ldcLogin"));
+      if (!token) return false;
+      const now = Date.now();
+      const diff = (now - token.timestamp) / (1000 * 60 * 60); // hours
+      return diff < LOGIN_DURATION_HOURS;
+    }
+
+    function showLogin() {
+      document.getElementById("loginOverlay").classList.remove("hidden");
+    }
+
+    function hideLogin() {
+      document.getElementById("loginOverlay").classList.add("hidden");
+    }
+
+    function handleLogin() {
+      const phone = document.getElementById("phoneInput").value.trim();
+      const password = document.getElementById("passInput").value.trim();
+      const error = document.getElementById("loginError");
+
+      if (phone === FIXED_PHONE && password === FIXED_PASSWORD) {
+        const token = { phone, timestamp: Date.now() };
+        localStorage.setItem("ldcLogin", JSON.stringify(token));
+        hideLogin();
+        initApp();
+      } else {
+        error.classList.remove("hidden");
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem("ldcLogin");
+      location.reload();
+    }
 
     function getStorageKey() {
       return `entries-${entryDate.value}`;
@@ -246,9 +297,7 @@ END:VCARD
       fetch(SYNC_URL, {
         method: "POST",
         body: JSON.stringify(entries),
-        headers: {
-          "Content-Type": "application/json"
-        }
+        headers: { "Content-Type": "application/json" }
       }).then(res => {
         showStatus("✅ Synced to Google Sheet", "online");
         setTimeout(() => hideStatus(), 3000);
@@ -279,12 +328,22 @@ END:VCARD
       }
     }
 
+    function initApp() {
+      updateNetworkStatus();
+      entryDate.valueAsDate = new Date();
+      entryDate.addEventListener('change', loadEntries);
+      loadEntries();
+    }
+
     window.addEventListener('online', updateNetworkStatus);
     window.addEventListener('offline', updateNetworkStatus);
 
-    // Initial load
-    updateNetworkStatus();
-    loadEntries();
+    if (isLoggedIn()) {
+      hideLogin();
+      initApp();
+    } else {
+      showLogin();
+    }
 
     // PWA support
     if ('serviceWorker' in navigator) {
